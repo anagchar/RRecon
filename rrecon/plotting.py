@@ -15,6 +15,7 @@ from typing import Optional
 
 import matplotlib.pyplot as plt
 import pandas as pd
+import pysam
 
 
 def _chrom_sort_key(chrom: str):
@@ -36,11 +37,13 @@ def load_chrom_sizes_from_fai(fai_path: str) -> dict:
     return sizes
 
 
+def load_chrom_sizes_from_bam(bam_path: str) -> dict:
+    """Read exact chromosome lengths straight from a BAM's header."""
+    with pysam.AlignmentFile(bam_path, "rb") as bam:
+        return dict(zip(bam.references, bam.lengths))
+
+
 def _chrom_extents(df: pd.DataFrame, chrom_sizes: Optional[dict] = None) -> dict:
-    """{chrom: extent}. Uses true lengths from chrom_sizes when given;
-    otherwise infers each chromosome's extent as the max `end` seen for it
-    in df -- a rough stand-in that's fine for visual spacing but not for
-    reporting exact coordinates."""
     chroms = df["chrom"].unique()
     if chrom_sizes:
         return {

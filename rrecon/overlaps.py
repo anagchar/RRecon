@@ -77,6 +77,7 @@ def process_chromosome(
     min_mapq: int = 0,
     hts_threads: int = 1,
     collect_stats: bool = False,
+    barcodes=None,
 ):
     """Extract + merge overlaps for a single chromosome only.
 
@@ -86,6 +87,10 @@ def process_chromosome(
     chromosome boundary -- results are identical to running the
     whole-file version and then subsetting to this chrom. This is the
     function that gets handed to a process pool, one call per chromosome.
+
+    `barcodes`: optional single barcode or iterable of barcodes -- if
+    given, only those cells' reads are kept (see iter_filtered_reads for
+    what this does and doesn't save you). None keeps every barcode.
 
     Returns:
         (merged_df, stats_dict_or_None) -- a tuple so the same function
@@ -101,6 +106,7 @@ def process_chromosome(
         region=chrom,
         threads=hts_threads,
         stats=stats,
+        barcodes=barcodes,
     )
     df = records_to_frame(records)
     merged = merge_overlaps(df)

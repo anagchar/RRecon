@@ -7,7 +7,7 @@ reconstruction step (Task 2 proper, not the scatter plot) will reuse it too.
 """
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional, Union
 
 import pysam
 
@@ -30,12 +30,14 @@ def iter_filtered_reads(
     stats: Optional[dict] = None,
     region: Optional[str] = None,
     threads: int = 1,
+    barcodes: Optional[Union[str, Iterable[str]]] = None,
+    canonical_chroms: Optional[Iterable[str]] = None,
 ):
     """Yield a ReadRecord for each alignment that passes the standard filter.
 
     Kept: primary, mapped, non-duplicate, non-secondary, non-supplementary
     alignments with mapping quality >= min_mapq and a `barcode_tag` tag
-    present.
+    present (and, if `barcodes` is given, matching one of those barcodes).
 
     Args:
         bam_path: path to a coordinate-sorted, indexed BAM file.
@@ -46,7 +48,8 @@ def iter_filtered_reads(
         min_mapq: minimum mapping quality to keep a read.
         stats: optional dict to update in place with filtering counts
             (total, unmapped, secondary_or_supplementary, duplicate,
-            low_mapq, missing_barcode, kept). Pass `{}` to collect them.
+            low_mapq, missing_barcode, other_barcode, kept). Pass `{}` to
+            collect them.
         region: if given, restrict the scan to this contig only (e.g.
             "chr1"), using pysam's indexed `.fetch()` instead of a full
             linear scan. Requires a `.bai`/`.csi` index next to bam_path.
@@ -56,10 +59,31 @@ def iter_filtered_reads(
             (pysam/htslib-native parallelism, separate from and
             complementary to Python-level multiprocessing across
             chromosomes).
+        barcodes: if given (a single barcode string, or any iterable of
+            them), only reads carrying one of these barcodes are kept --
+            everything else is dropped after its tag is read. NOTE: this
+            does NOT skip decompressing/parsing non-matching reads --
+            a coordinate-sorted BAM has no index by barcode, so every
+            record still has to be inspected. It only reduces what gets
+            held in memory and merged downstream. Leave None to keep
+            every barcode (current default behaviour).
+        canonical_chroms: if given, reads whose chromosome isn't in this
+            set are dropped (see rrecon.chroms.DEFAULT_CANONICAL_CHROMS --
+            excludes chrM, alt haplotypes, decoys, unplaced scaffolds).
+            When scanning with `region` already set to a single canonical
+            chromosome (the normal find_overlaps.py path), this is a
+            no-op safety net; it matters when scanning without `region`
+            (a full linear pass) or calling this generically. Leave None
+            to keep every chromosome present in the file.
 
     Yields:
         ReadRecord
     """
+    if isinstance(barcodes, str):
+        barcodes = {barcodes}
+    elif barcodes is not None:
+        barcodes = set(barcodes)
+
     if stats is not None:
         for key in (
             "total",
@@ -68,6 +92,8 @@ def iter_filtered_reads(
             "duplicate",
             "low_mapq",
             "missing_barcode",
+            "other_barcode",
+            "non_canonical_chrom",
             "kept",
         ):
             stats.setdefault(key, 0)
@@ -81,6 +107,10 @@ def iter_filtered_reads(
             if read.is_unmapped:
                 if stats is not None:
                     stats["unmapped"] += 1
+                continue
+            if canonical_chroms is not None and read.reference_name not in canonical_chroms:
+                if stats is not None:
+                    stats["non_canonical_chrom"] += 1
                 continue
             if read.is_secondary or read.is_supplementary:
                 if stats is not None:
@@ -99,6 +129,11 @@ def iter_filtered_reads(
             except KeyError:
                 if stats is not None:
                     stats["missing_barcode"] += 1
+                continue
+
+            if barcodes is not None and barcode not in barcodes:
+                if stats is not None:
+                    stats["other_barcode"] += 1
                 continue
 
             if stats is not None:

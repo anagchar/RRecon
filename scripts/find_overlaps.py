@@ -3,8 +3,8 @@
 
 Usage:
     python scripts/find_overlaps.py --bam in.bam --out overlaps.tsv \
-        [--barcode-tag CB] [--min-mapq 0] [--processes 4] [--hts-threads 2] \
-        [--verbose]
+        [--barcode-tag CB] [--barcode AAAA [AAAA2 ...]] [--min-mapq 0] \
+        [--processes 4] [--hts-threads 2] [--verbose]
 
 Output TSV columns: barcode, chrom, start, end, n_overlaps
 (interval size = end - start, not stored separately)
@@ -15,6 +15,17 @@ chromosomes -- so each chromosome can be processed completely
 independently. --hts-threads controls htslib's own decompression
 parallelism per worker and stacks with --processes. GPUs don't apply here:
 this is per-read parsing/tag-lookup work, not bulk numeric compute.
+
+--barcode restricts output to one or more specific cells. NOTE: this saves
+memory and merge time, not scan time -- a coordinate-sorted BAM has no
+index by barcode, so every alignment record in the (selected) chromosomes
+still has to be decompressed and its tag checked either way.
+
+By default, only canonical chromosomes (1-22, X, Y) are scanned at all --
+alt haplotypes, decoys, chrM, and unplaced/unlocalized scaffolds are
+skipped before any work is dispatched, not filtered out after scanning.
+This one DOES save scan time, unlike --barcode. Pass --all-contigs to
+process every contig in the BAM instead.
 """
 
 import argparse
@@ -25,6 +36,7 @@ from concurrent.futures import ProcessPoolExecutor, as_completed
 import pandas as pd
 import pysam
 
+from rrecon.chroms import is_canonical_chrom
 from rrecon.overlaps import OVERLAP_COLUMNS, process_chromosome
 
 
@@ -40,6 +52,14 @@ def parse_args():
         help="BAM tag holding the cell barcode (default: CB). Check your "
         "file's actual tag names with `samtools view <bam> | head -1` "
         "if this default doesn't match.",
+    )
+    p.add_argument(
+        "--barcode",
+        nargs="+",
+        default=None,
+        help="Restrict to one or more specific cell barcodes (space-"
+        "separated). Default: keep every barcode. Saves memory/merge time, "
+        "not scan time -- see module docstring.",
     )
     p.add_argument(
         "--min-mapq",
@@ -62,6 +82,13 @@ def parse_args():
         "even with --processes 1.",
     )
     p.add_argument(
+        "--all-contigs",
+        action="store_true",
+        help="Process every contig in the BAM, including alt haplotypes, "
+        "decoys, chrM, and unplaced/unlocalized scaffolds. Default: only "
+        "canonical chromosomes 1-22, X, Y are scanned.",
+    )
+    p.add_argument(
         "--verbose",
         action="store_true",
         help="Print per-chromosome read-filtering stats to stderr",
@@ -81,14 +108,38 @@ def main():
     ensure_indexed(args.bam)
 
     with pysam.AlignmentFile(args.bam, "rb") as bam:
-        chroms = list(bam.references)
+        all_chroms = list(bam.references)
+
+    if args.all_contigs:
+        chroms = all_chroms
+    else:
+        chroms = [c for c in all_chroms if is_canonical_chrom(c)]
+        skipped = [c for c in all_chroms if c not in chroms]
+        if args.verbose and skipped:
+            preview = ", ".join(skipped[:10]) + (" ..." if len(skipped) > 10 else "")
+            print(
+                f"Skipping {len(skipped)} non-canonical contig(s): {preview}",
+                file=sys.stderr,
+            )
+        if not chroms:
+            raise SystemExit(
+                "None of this BAM's contigs matched the canonical chr1-22/X/Y "
+                f"naming (found: {all_chroms[:10]}...). Re-run with "
+                "--all-contigs if this reference uses different names."
+            )
 
     merged_parts = []
 
     if args.processes <= 1:
         for chrom in chroms:
             merged, stats = process_chromosome(
-                args.bam, chrom, args.barcode_tag, args.min_mapq, args.hts_threads, args.verbose
+                args.bam,
+                chrom,
+                args.barcode_tag,
+                args.min_mapq,
+                args.hts_threads,
+                args.verbose,
+                args.barcode,
             )
             if args.verbose:
                 print(f"{chrom}: {stats}", file=sys.stderr)
@@ -104,6 +155,7 @@ def main():
                     args.min_mapq,
                     args.hts_threads,
                     args.verbose,
+                    args.barcode,
                 ): chrom
                 for chrom in chroms
             }
@@ -123,10 +175,12 @@ def main():
     if merged.empty:
         raise SystemExit(
             f"No reads passed filtering (barcode tag='{args.barcode_tag}', "
-            f"min_mapq={args.min_mapq}). Most likely cause: --barcode-tag "
-            "doesn't match your BAM's actual tag name. Check with "
-            "`samtools view <bam> | head -1` and look at the tag fields. "
-            "Re-run with --verbose to see the per-chromosome breakdown."
+            f"min_mapq={args.min_mapq}, --barcode filter={args.barcode}). "
+            "Most likely cause: --barcode-tag doesn't match your BAM's "
+            "actual tag name, or --barcode names a barcode that isn't in "
+            "this file. Check with `samtools view <bam> | head -1` and "
+            "look at the tag fields. Re-run with --verbose to see the "
+            "per-chromosome breakdown."
         )
 
     merged.to_csv(args.out, sep="\t", index=False)
