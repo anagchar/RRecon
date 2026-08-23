@@ -1,0 +1,18 @@
+# Claude Code local session state -- never part of the project
+.claude/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+
+# OS
+.DS_Store
+
+# Data -- BAMs/indexes/outputs don't belong in git
+*.bam
+*.bai
+*.csi
+*.tsv
+*.png
+*.pdf

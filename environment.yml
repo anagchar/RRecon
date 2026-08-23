@@ -1,0 +1,10 @@
+name: rrecon
+channels:
+  - bioconda
+  - conda-forge
+dependencies:
+  - python=3.11
+  - pysam
+  - samtools
+  - pandas
+  - matplotlib
