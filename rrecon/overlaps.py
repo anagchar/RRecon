@@ -1,11 +1,3 @@
-"""Task 1: per-barcode overlapping-read clustering.
-
-Groups aligned reads by (cell barcode, chromosome), merges overlapping
-genomic intervals within each group, and counts how many reads contributed
-to each merged interval. Equivalent to running `bedtools merge -c 1 -o
-count` separately within every cell barcode.
-"""
-
 from typing import Iterable, Optional
 
 import pandas as pd
@@ -24,7 +16,7 @@ def records_to_frame(records: Iterable[ReadRecord]) -> pd.DataFrame:
 
 
 def merge_overlaps(df: pd.DataFrame) -> pd.DataFrame:
-    """Merge overlapping intervals within each (barcode, chrom) group.
+    """Find genuinely-overlapping sub-intervals within each (barcode, chrom) group.
 
     Args:
         df: DataFrame with columns barcode, chrom, start, end (one row
@@ -32,42 +24,65 @@ def merge_overlaps(df: pd.DataFrame) -> pd.DataFrame:
 
     Returns:
         DataFrame with columns barcode, chrom, start, end, n_overlaps.
-        Each output row is a maximal cluster of mutually/transitively
-        overlapping reads that share a barcode and chromosome; n_overlaps
-        is how many input reads collapsed into it. Interval size is
-        end - start (not stored separately).
     """
     if df.empty:
         return pd.DataFrame(columns=OVERLAP_COLUMNS)
 
-    df = df.sort_values(["barcode", "chrom", "start"]).reset_index(drop=True)
     group_keys = ["barcode", "chrom"]
 
-    # Running max of `end` seen in *earlier* rows of the same group.
-    # (cummax includes the current row, so shift(1) drops back to
-    # "before this row".)
-    prev_end_cummax = df.groupby(group_keys)["end"].cummax().shift(1)
+    # Two sweep-line events per read: +1 where it starts, -1 where it ends.
+    starts = df[group_keys + ["start"]].rename(columns={"start": "pos"})
+    starts["delta"] = 1
+    ends = df[group_keys + ["end"]].rename(columns={"end": "pos"})
+    ends["delta"] = -1
+    events = pd.concat([starts, ends], ignore_index=True)
 
-    # True at the first row of a (barcode, chrom) group.
-    same_group_as_prev = df[group_keys].eq(df[group_keys].shift(1)).all(axis=1)
+    # Net delta at each distinct position in a group -- a read ending
+    # exactly where another starts cancels out here (half-open coords:
+    # no shared base, so no depth change at that boundary).
+    events = (
+        events.groupby(group_keys + ["pos"], as_index=False)["delta"]
+        .sum()
+        .sort_values(group_keys + ["pos"])
+        .reset_index(drop=True)
+    )
 
-    # A new cluster starts when we've entered a new group, or when this
-    # row's start doesn't reach back into anything accumulated so far.
-    starts_new_cluster = (~same_group_as_prev) | (df["start"] > prev_end_cummax)
-    cluster_id = starts_new_cluster.cumsum()
+    events["depth"] = events.groupby(group_keys)["delta"].cumsum()
 
-    merged = (
-        df.groupby(cluster_id)
+    # A new segment starts whenever depth differs from the previous event
+    # in the same group (grouped shift(1) is NaN at each group's first
+    # row, which always compares unequal, so group boundaries fall out
+    # for free without a separate check).
+    prev_depth = events.groupby(group_keys)["depth"].shift(1)
+    starts_new_segment = events["depth"] != prev_depth
+    segment_id = starts_new_segment.cumsum()
+
+    # A segment's end is wherever the *next* event in the group occurs --
+    # depth is constant right up to that position. The final event of
+    # each group always has depth 0 (every read has ended by then), so
+    # it's dropped by the depth>=2 filter below regardless of its
+    # (undefined) end.
+    events["seg_end"] = events.groupby(group_keys)["pos"].shift(-1)
+
+    segments = (
+        events.groupby(segment_id)
         .agg(
             barcode=("barcode", "first"),
             chrom=("chrom", "first"),
-            start=("start", "min"),
-            end=("end", "max"),
-            n_overlaps=("start", "size"),
+            start=("pos", "first"),
+            end=("seg_end", "last"),
+            n_overlaps=("depth", "first"),
         )
         .reset_index(drop=True)
     )
-    return merged
+
+    overlaps = segments[segments["n_overlaps"] >= 2].reset_index(drop=True)
+    # `end` picks up float64 from the NaN seg_end of each group's final
+    # (always-dropped, depth-0) event; every surviving row has a real
+    # value at this point, so this is just restoring the int dtype.
+    overlaps["end"] = overlaps["end"].astype(int)
+    overlaps["n_overlaps"] = overlaps["n_overlaps"].astype(int)
+    return overlaps[OVERLAP_COLUMNS]
 
 
 def process_chromosome(
@@ -81,19 +96,8 @@ def process_chromosome(
 ):
     """Extract + merge overlaps for a single chromosome only.
 
-    Safe to run independently/in parallel across chromosomes:
-    merge_overlaps groups by (barcode, chrom), and restricting the input
-    to one chromosome at a time means it can never merge across a
-    chromosome boundary -- results are identical to running the
-    whole-file version and then subsetting to this chrom. This is the
-    function that gets handed to a process pool, one call per chromosome.
-
-    `barcodes`: optional single barcode or iterable of barcodes -- if
-    given, only those cells' reads are kept (see iter_filtered_reads for
-    what this does and doesn't save you). None keeps every barcode.
-
     Returns:
-        (merged_df, stats_dict_or_None) -- a tuple so the same function
+        (merged_df, stats_dict_or_None): a tuple so the same function
         works whether called directly (sequential) or via
         ProcessPoolExecutor.submit (parallel); the return value has to be
         picklable either way, and a (DataFrame, dict) tuple is.

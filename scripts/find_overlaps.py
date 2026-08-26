@@ -7,7 +7,10 @@ Usage:
         [--processes 4] [--hts-threads 2] [--verbose]
 
 Output TSV columns: barcode, chrom, start, end, n_overlaps
-(interval size = end - start, not stored separately)
+start/end bound only the overlapping sub-interval itself (not the full
+span of any contributing read); n_overlaps is the read depth there.
+Reads are not chained transitively -- A-overlaps-B-overlaps-C with no
+base shared by all three yields two rows (A∩B, B∩C), not one A-to-C row.
 
 Parallelism: work is split by chromosome (--processes), since overlaps are
 only ever merged within a (barcode, chrom) group -- never across
