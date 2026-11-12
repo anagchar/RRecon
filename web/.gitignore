@@ -1,3 +1,4 @@
 node_modules
 dist-pages
 public/demo
+tsconfig.tsbuildinfo
