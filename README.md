@@ -83,6 +83,7 @@ counts and chromosome lengths.
 | `--hp-tag` | – | haplotype tag (`HP`). Reads with value 1 or 2 form haplotypes `1` and `2`; all others are `untagged`. Without it every read is `untagged`. |
 | `--ps-tag` | – | phase-set tag (`PS`), reported per pair as `phase_block` |
 | `--min-mapq` | 0 | minimum MAPQ |
+| `--chroms` | – | only these contigs, comma-separated (e.g. `chr22` for a quick test) |
 | `--all-contigs` | off | also scan alt, decoy, unplaced contigs and chrM (default: 1–22, X, Y, with or without `chr`) |
 | `--bin-size` | 1000000 | bin size for `density_bins` |
 | `--junction-size` | 9 | Tn5 duplication length |

@@ -71,3 +71,13 @@ def test_server_lists_and_serves_outputs(bam, tmp_path):
 def test_server_without_folder():
     c = TestClient(create_app(None))
     assert c.get("/api/files").json()["files"] == []
+
+
+def test_chroms_option(bam, tmp_path):
+    out = tmp_path / "c2"
+    r = CliRunner().invoke(main, ["overlaps", str(bam), "-o", str(out), "--chroms", "chr2",
+                                  "--format", "tsv"])
+    assert r.exit_code == 0, r.output
+    assert set(rrecon.read_table(out / "cases.overlaps.tsv.gz").chrom) == {"chr2"}
+    r = CliRunner().invoke(main, ["overlaps", str(bam), "-o", str(out), "--chroms", "chr99"])
+    assert r.exit_code != 0 and "not in the BAM header" in r.output

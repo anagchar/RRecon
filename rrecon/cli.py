@@ -51,6 +51,8 @@ def scan_options(f):
         click.option("--min-mapq", type=int, default=0, show_default=True),
         click.option("--barcodes", default=None,
                      help="Allow-list: a file (one barcode per line, .gz ok) or a comma list."),
+        click.option("--chroms", default=None,
+                     help="Only these contigs, comma-separated (e.g. chr22 for a quick test)."),
         click.option("--all-contigs", is_flag=True,
                      help="Scan every contig, not only chromosomes 1-22, X, Y."),
         click.option("--bin-size", type=int, default=1_000_000, show_default=True,
@@ -77,10 +79,12 @@ def scan_options(f):
     return f
 
 
-def _run(outputs, bam, out_dir, prefix, engine, barcodes, **kw):
+def _run(outputs, bam, out_dir, prefix, engine, barcodes, chroms, **kw):
     params = Params(barcodes=_barcodes(barcodes), **kw)
+    contigs = [c for c in chroms.split(",") if c] if chroms else None
     try:
-        res = run(bam, out_dir, outputs, prefix=prefix, engine=engine, params=params)
+        res = run(bam, out_dir, outputs, prefix=prefix, engine=engine, params=params,
+                  chroms=contigs)
     except (ValueError, RuntimeError, OSError) as e:
         raise click.ClickException(str(e)) from e
     s = res.stats
