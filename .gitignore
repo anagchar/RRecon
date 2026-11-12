@@ -16,3 +16,16 @@ __pycache__/
 *.tsv
 *.png
 *.pdf
+
+# Rust / maturin
+rust/target/
+*.so
+
+# Web
+web/node_modules/
+web/dist-pages/
+rrecon/static/
+
+# Data outputs
+*.tsv.gz
+*.parquet

@@ -1,10 +1,39 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
 
 [project]
 name = "rrecon"
-version = "0.1.0"
-description = "Read reconstruction for SPLONGGET ONT data using Tn5 9bp TSD junctions"
+version = "0.2.0"
+description = "Read density, pairwise read overlaps and Tn5 9 bp junctions from Tn5-based single-cell BAMs"
+readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["pysam", "pandas", "matplotlib"]
+license = { text = "MIT" }
+dependencies = [
+  "pysam>=0.22",
+  "pandas>=2.0",
+  "pyarrow>=14",
+  "matplotlib>=3.7",
+  "click>=8.1",
+  "fastapi>=0.110",
+  "uvicorn>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8", "httpx>=0.27", "maturin>=1.7,<2"]
+
+[project.scripts]
+rrecon = "rrecon.cli:main"
+
+[project.urls]
+Source = "https://github.com/anagchar/RRecon"
+
+[tool.maturin]
+manifest-path = "rust/Cargo.toml"
+module-name = "rrecon._core"
+features = ["python"]
+python-packages = ["rrecon"]
+include = [{ path = "rrecon/static/**/*", format = ["sdist", "wheel"] }]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,30 @@
+[package]
+name = "rrecon-core"
+version = "0.2.0"
+edition = "2021"
+description = "Fast core of rrecon: read density, pairwise read overlaps and Tn5 9 bp junctions from a BAM"
+license = "MIT"
+publish = false
+
+[lib]
+name = "rrecon_core"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = []
+# maturin builds with this feature; `cargo test` runs without Python.
+python = ["dep:pyo3"]
+
+[dependencies]
+flate2 = "1.1"
+noodles-bam = "0.97"
+noodles-bgzf = "0.52"
+noodles-core = "0.21"
+noodles-csi = "0.62"
+noodles-sam = "0.92"
+rayon = "1.12"
+pyo3 = { version = "0.30", features = ["abi3-py310", "extension-module"], optional = true }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
