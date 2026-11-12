@@ -2,7 +2,7 @@
 
 Task-agnostic: this module knows how to pull clean, filtered alignment
 records out of a BAM file. It has no opinion about what you do with them
-afterwards -- rrecon.overlaps (Task 1) consumes it, and the fragment
+afterwards -- rrecon.merge (Task 1) consumes it, and the fragment
 reconstruction step (Task 2 proper, not the scatter plot) will reuse it too.
 """
 

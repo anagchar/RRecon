@@ -1,4 +1,4 @@
-"""Tests for rrecon.overlaps.merge_overlaps.
+"""Tests for rrecon.merge.merge_overlaps.
 
 Pins down the two things Task 1's output is supposed to mean:
   - n_overlaps is the read *depth* at a sub-interval (how many reads
@@ -11,7 +11,7 @@ Pins down the two things Task 1's output is supposed to mean:
 import pandas as pd
 import pytest
 
-from rrecon.overlaps import OVERLAP_COLUMNS, merge_overlaps, records_to_frame
+from rrecon.merge import OVERLAP_COLUMNS, merge_overlaps, records_to_frame
 from rrecon.bam_io import ReadRecord
 
 

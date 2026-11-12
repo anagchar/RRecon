@@ -40,7 +40,7 @@ import pandas as pd
 import pysam
 
 from rrecon.chroms import is_canonical_chrom
-from rrecon.overlaps import OVERLAP_COLUMNS, process_chromosome
+from rrecon.merge import OVERLAP_COLUMNS, process_chromosome
 
 
 def parse_args():

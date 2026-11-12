@@ -1,3 +1,10 @@
+"""Depth>=2 overlap segments per (barcode, chrom): the original Task 1 sweep-line.
+
+Used by scripts/find_overlaps.py. The read-pair overlaps and Tn5 junctions
+live in rrecon.api (rrecon.overlaps() / rrecon.tn5_junctions()).
+"""
+
+
 from typing import Iterable, Optional
 
 import pandas as pd
