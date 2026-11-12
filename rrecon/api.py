@@ -222,7 +222,7 @@ def to_parquet(tsv_gz: Path, dest: Path, kind: str) -> Path:
             false_values=["false"],
         ),
     )
-    with pq.ParquetWriter(dest, schema, compression="zstd") as w:
+    with pq.ParquetWriter(dest, schema, compression="snappy") as w:
         for batch in reader:
             w.write_batch(batch)
     return dest

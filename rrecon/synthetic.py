@@ -178,7 +178,8 @@ def random_reads(
     seed: int = 7,
 ) -> list[SynthRead]:
     """A realistic mix: random reads per cell and haplotype, with a fraction
-    planted as 9 bp Tn5 junction pairs (some with a mismatch)."""
+    followed by a planted neighbour that overlaps it by 9 bp (a Tn5 junction,
+    sometimes with a mismatch) or by a random 1-60 bp."""
     rng = random.Random(seed)
     names = list(chroms)
     weights = [chroms[c] for c in names]
@@ -197,9 +198,15 @@ def random_reads(
             reads.append(SynthRead(f"r{k}", chrom, start, M(n), cell, hp, ps,
                                    reverse=rng.random() < 0.5, mapq=mapq))
             if rng.random() < junction_frac:
-                n2 = rng.randint(*read_len)
+                # a planted neighbour: mostly a 9 bp Tn5 junction (some with a
+                # mismatch), otherwise a short chance overlap of 1-60 bp
+                size = 9 if rng.random() < 0.7 else rng.randint(1, 60)
+                s2 = start + n - size
+                n2 = min(rng.randint(max(read_len[0], size + 1), read_len[1]), chroms[chrom] - s2)
+                if n2 <= size:
+                    continue
                 k += 1
-                edits = [rng.randrange(9)] if rng.random() < 0.2 else []
-                reads.append(SynthRead(f"r{k}", chrom, start + n - 9, M(n2), cell, hp, ps,
+                edits = [rng.randrange(size)] if size == 9 and rng.random() < 0.2 else []
+                reads.append(SynthRead(f"r{k}", chrom, s2, M(n2), cell, hp, ps,
                                        reverse=rng.random() < 0.5, mapq=mapq, edits=edits))
     return reads
